@@ -293,14 +293,14 @@ Clone the repository and install dependencies:
 ```bash
 git clone https://github.com/lhw/opencode-plugin-git-memory.git
 cd opencode-plugin-git-memory
-bun install
+npm install
 ```
 
 Run checks:
 
 ```bash
-bun test
-bun run typecheck
+npm test
+npm run typecheck
 ```
 
 Point your OpenCode config to the local checkout via a `file://` URL:
@@ -308,6 +308,8 @@ Point your OpenCode config to the local checkout via a `file://` URL:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["file:///absolute/path/to/opencode-plugin-git-memory"]
+  "plugin": ["file:///absolute/path/to/opencode-plugin-git-memory/index.ts"]
+}
+```
 
 Replace `/absolute/path/to/opencode-plugin-git-memory` with your actual path.

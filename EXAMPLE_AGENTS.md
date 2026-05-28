@@ -1,6 +1,6 @@
-# Example AGENTS.md Using Simple Memory Plugin
+# Example AGENTS.md Using Git Memory Plugin
 
-This is an example `AGENTS.md` file showing how to configure agent guidelines for a project using the simple-memory plugin.
+This is an example `AGENTS.md` file showing how to configure agent guidelines for a project using the git-memory plugin.
 
 ---
 
@@ -83,9 +83,9 @@ memory_list()  # Returns all scopes and types in use
 
 ## Commands
 
-- **Install**: `bun install`
-- **Test**: `bun test`
-- **Type check**: `bun run typecheck`
+- **Install**: `npm install`
+- **Test**: `npm test`
+- **Type check**: `npm run typecheck`
 
 ## Code Style
 
