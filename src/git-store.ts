@@ -20,6 +20,13 @@ const git = (args: string[], options?: { input?: string; cwd?: string }): { stdo
   }
 }
 
+/** Git-backed MemoryStore using synchronous `spawnSync` git plumbing.
+ *
+ * All git operations are synchronous (`spawnSync`), which blocks the Node.js
+ * event loop. For a plugin called once per agent response (typically <10 git
+ * commands per turn), this is acceptable. If call frequency increases or the
+ * memory store grows to hundreds of files, consider migrating to async
+ * `spawn` with a queue. */
 export class GitStore implements MemoryStore {
   readonly dir: string
   readonly branch: string
@@ -85,6 +92,9 @@ export class GitStore implements MemoryStore {
   }
 
   async appendMemory(memory: Memory): Promise<void> {
+    if (memory.content.length > 100_000) throw new Error("Memory content exceeds 100KB limit")
+    if (memory.content.includes("\0")) throw new Error("Memory content contains null bytes")
+
     this.ensureDir()
     const filename = `${dateFromTs(memory.ts)}.logfmt`
     const filepath = `${this.subdir}/${filename}`

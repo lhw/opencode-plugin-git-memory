@@ -190,6 +190,46 @@ export const matchesScope = (memory: Memory, scope: string, mode: "contains" | "
 const startOfDateFilter = (value: string) => value.includes("T") ? value : `${value}T00:00:00.000Z`
 const endOfDateFilter = (value: string) => value.includes("T") ? value : `${value}T23:59:59.999Z`
 
+interface MemoryFilters {
+  scope?: string
+  scopeMatch?: "contains" | "exact" | "prefix"
+  type?: MemoryType | readonly MemoryType[]
+  tags?: string[]
+  since?: string
+  until?: string
+}
+
+const applyFilters = (memories: Memory[], filters: MemoryFilters): Memory[] => {
+  let results = memories
+  const scopeMatch = filters.scopeMatch || "contains"
+
+  if (filters.scope) {
+    const s = filters.scope
+    results = results.filter((memory) => matchesScope(memory, s, scopeMatch))
+  }
+  if (filters.type) {
+    const types = Array.isArray(filters.type) ? filters.type : [filters.type]
+    results = results.filter((memory) => (types as readonly MemoryType[]).includes(memory.type))
+  }
+  if (filters.tags?.length) {
+    const tags = filters.tags.map((tag) => tag.toLowerCase())
+    results = results.filter((memory) => {
+      const memoryTags = memory.tags?.map((tag) => tag.toLowerCase()) || []
+      return tags.every((tag) => memoryTags.includes(tag))
+    })
+  }
+  if (filters.since) {
+    const since = startOfDateFilter(filters.since)
+    results = results.filter((memory) => memory.ts >= since)
+  }
+  if (filters.until) {
+    const until = endOfDateFilter(filters.until)
+    results = results.filter((memory) => memory.ts <= until)
+  }
+
+  return results
+}
+
 export const filterMemories = (memories: Memory[], args: {
   scope?: string
   type?: MemoryType
@@ -199,26 +239,14 @@ export const filterMemories = (memories: Memory[], args: {
   until?: string
   match?: "contains" | "exact" | "prefix"
 }) => {
-  let results = memories
-  const match = args.match || "contains"
-
-  if (args.scope) { const s = args.scope; results = results.filter((memory) => matchesScope(memory, s, match)) }
-  if (args.type) results = results.filter((memory) => memory.type === args.type)
-  if (args.tags?.length) {
-    const tags = args.tags.map((tag) => tag.toLowerCase())
-    results = results.filter((memory) => {
-      const memoryTags = memory.tags?.map((tag) => tag.toLowerCase()) || []
-      return tags.every((tag) => memoryTags.includes(tag))
-    })
-  }
-  if (args.since) {
-    const since = startOfDateFilter(args.since)
-    results = results.filter((memory) => memory.ts >= since)
-  }
-  if (args.until) {
-    const until = endOfDateFilter(args.until)
-    results = results.filter((memory) => memory.ts <= until)
-  }
+  const results = applyFilters(memories, {
+    scope: args.scope,
+    scopeMatch: args.match,
+    type: args.type,
+    tags: args.tags,
+    since: args.since,
+    until: args.until,
+  })
 
   if (!args.query) return results
 
@@ -244,17 +272,12 @@ export const buildContextPack = (memories: Memory[], options: {
   const minScore = options.minScore ?? (query ? 1 : 0)
   const maxChars = options.maxChars && options.maxChars > 0 ? Math.floor(options.maxChars) : 1200
   const limit = options.limit && options.limit > 0 ? Math.floor(options.limit) : 5
-  let results = memories
 
-  if (options.scope) { const s = options.scope; results = results.filter((memory) => matchesScope(memory, s, "contains")) }
-  if (options.types?.length) results = results.filter((memory) => options.types!.includes(memory.type))
-  if (options.tags?.length) {
-    const tags = options.tags.map((tag) => tag.toLowerCase())
-    results = results.filter((memory) => {
-      const memoryTags = memory.tags?.map((tag) => tag.toLowerCase()) || []
-      return tags.every((tag) => memoryTags.includes(tag))
-    })
-  }
+  const results = applyFilters(memories, {
+    scope: options.scope,
+    type: options.types,
+    tags: options.tags,
+  })
 
   const ranked = results
     .map((memory) => ({

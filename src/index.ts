@@ -3,6 +3,7 @@ import { join } from "node:path"
 import {
   type Memory,
   type MemoryStore,
+  MEMORY_TYPES,
   buildContextPack,
   filterMemories,
   formatMemory,
@@ -12,6 +13,9 @@ import {
   scoreMatch,
   textFromParts,
   withTimeout,
+  parseLine,
+  dateFromTs,
+  isMemoryType,
 } from "./format"
 import { GitStore } from "./git-store"
 
@@ -34,7 +38,7 @@ const createTools = (store: MemoryStore) => {
   const remember = tool({
     description: "Store a memory (decision, learning, preference, blocker, context, pattern)",
     args: {
-      type: tool.schema.enum(["decision", "learning", "preference", "blocker", "context", "pattern"]).describe("Type of memory"),
+      type: tool.schema.enum([...MEMORY_TYPES]).describe("Type of memory"),
       scope: tool.schema.string().describe("Scope/area (e.g., auth, api, mobile)"),
       content: tool.schema.string().describe("The memory content"),
       issue: tool.schema.string().optional().describe("Related GitHub issue (e.g., #51)"),
@@ -58,7 +62,7 @@ const createTools = (store: MemoryStore) => {
     description: "Retrieve memories by scope, type, tag, date, or search query",
     args: {
       scope: tool.schema.string().optional().describe("Filter by scope"),
-      type: tool.schema.enum(["decision", "learning", "preference", "blocker", "context", "pattern"]).optional().describe("Filter by type"),
+      type: tool.schema.enum([...MEMORY_TYPES]).optional().describe("Filter by type"),
       query: tool.schema.string().optional().describe("Search term (space-separated words, matches any)"),
       limit: tool.schema.number().optional().describe("Max results (default 20)"),
       tags: tool.schema.array(tool.schema.string()).optional().describe("Only include memories with all of these tags"),
@@ -93,7 +97,7 @@ const createTools = (store: MemoryStore) => {
     description: "Update an existing memory by scope and type (finds matching memory and updates its content)",
     args: {
       scope: tool.schema.string().describe("Scope of memory to update"),
-      type: tool.schema.enum(["decision", "learning", "preference", "blocker", "context", "pattern"]).describe("Type of memory"),
+      type: tool.schema.enum([...MEMORY_TYPES]).describe("Type of memory"),
       content: tool.schema.string().describe("The new content for the memory"),
       query: tool.schema.string().optional().describe("Search term to find specific memory if multiple exist"),
       issue: tool.schema.string().optional().describe("Update related GitHub issue (e.g., #51)"),
@@ -165,7 +169,7 @@ const createTools = (store: MemoryStore) => {
     description: "Delete memories by scope and type (optionally narrowed by query; logs deletion for audit)",
     args: {
       scope: tool.schema.string().describe("Scope of memory to delete"),
-      type: tool.schema.enum(["decision", "learning", "preference", "blocker", "context", "pattern"]).describe("Type of memory"),
+      type: tool.schema.enum([...MEMORY_TYPES]).describe("Type of memory"),
       reason: tool.schema.string().describe("Why this is being deleted (for audit purposes)"),
       query: tool.schema.string().optional().describe("Optional search term to delete only the best matching memory"),
     },
@@ -236,7 +240,6 @@ const createTools = (store: MemoryStore) => {
         const parsed = JSON.parse(args.data) as Memory[]
         imported.push(...parsed)
       } else if (format === "logfmt") {
-        const { parseLine } = await import("./format")
         imported.push(...args.data.split("\n").map(parseLine).filter((memory): memory is Memory => memory !== null))
       } else {
         imported.push(...args.data.split("\n").filter(Boolean).map((line) => JSON.parse(line) as Memory))
@@ -244,7 +247,6 @@ const createTools = (store: MemoryStore) => {
 
       let count = 0
       for (const memory of imported) {
-        const { isMemoryType } = await import("./format")
         if (!isMemoryType(memory.type)) continue
         await store.appendMemory({
           ts: memory.ts || new Date().toISOString(),
@@ -279,7 +281,6 @@ const createTools = (store: MemoryStore) => {
 
       const byDate = new Map<string, string[]>()
       for (const memory of [...unique.values()].sort((a, b) => a.ts.localeCompare(b.ts))) {
-        const { dateFromTs } = await import("./format")
         const date = dateFromTs(memory.ts)
         if (!byDate.has(date)) byDate.set(date, [])
         byDate.get(date)!.push(encodeMemory(memory))
@@ -299,7 +300,7 @@ const createTools = (store: MemoryStore) => {
       query: tool.schema.string().optional().describe("Task text to match against memories"),
       scope: tool.schema.string().optional().describe("Optional scope filter"),
       tags: tool.schema.array(tool.schema.string()).optional().describe("Only include memories with all of these tags"),
-      types: tool.schema.array(tool.schema.enum(["decision", "learning", "preference", "blocker", "context", "pattern"])).optional().describe("Only include these memory types"),
+      types: tool.schema.array(tool.schema.enum([...MEMORY_TYPES])).optional().describe("Only include these memory types"),
       limit: tool.schema.number().optional().describe("Maximum memories to include (default 5)"),
       maxChars: tool.schema.number().optional().describe("Maximum characters in the context pack (default 1200)"),
       minScore: tool.schema.number().optional().describe("Minimum query relevance score (default 1 when query is provided)"),
