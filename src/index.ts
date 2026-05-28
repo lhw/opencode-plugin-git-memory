@@ -22,6 +22,7 @@ import { GitStore } from "./git-store"
 interface PluginOptions {
   autoLoad?: boolean
   autoSave?: boolean
+  autoSaveOnCompact?: boolean
   autoHookTimeoutMs?: number
   contextLimit?: number
   contextMaxChars?: number
@@ -34,7 +35,7 @@ const createStore = (repoRoot: string, branch?: string): MemoryStore => {
   return new GitStore({ repoRoot, branch })
 }
 
-const createTools = (store: MemoryStore) => {
+const createTools = (store: MemoryStore, autoSaveOnCompact = false) => {
   const remember = tool({
     description: "Store a memory (decision, learning, preference, blocker, context, pattern)",
     args: {
@@ -303,6 +304,16 @@ const createTools = (store: MemoryStore) => {
       for (const filepath of files) await store.rewriteFile(filepath, [])
       for (const [date, lines] of byDate) await store.rewriteFile(join(store.dir, `${date}.logfmt`), lines)
 
+      if (autoSaveOnCompact) {
+        await store.appendMemory({
+          ts: new Date().toISOString(),
+          type: "context",
+          scope: "system",
+          content: `Memory store compacted: ${entries.length} → ${unique.size} entries (${duplicateCount} duplicates removed)`,
+          tags: ["auto", "compact"],
+        })
+      }
+
       return `Compacted ${entries.length} memories to ${unique.size} unique memories (${duplicateCount} duplicate(s) removed)`
     },
   })
@@ -346,7 +357,7 @@ export const MemoryPlugin = (async (ctx, options?: PluginOptions) => {
   let latestPrompt: string | undefined
 
   return {
-    tool: createTools(store),
+    tool: createTools(store, options?.autoSaveOnCompact),
     "chat.message": async (input, output) => {
       const text = textFromParts(output.parts)
       if (!text) return

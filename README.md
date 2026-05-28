@@ -152,6 +152,7 @@ Configure the behavior through plugin options by using OpenCode's plugin tuple f
         "contextMaxChars": 1200,
         "contextMinScore": 1,
         "autoSaveScope": "user",
+        "autoSaveOnCompact": true,
         "memoryBranch": "memory/agent"
       }
     ]
@@ -170,6 +171,7 @@ Configure the behavior through plugin options by using OpenCode's plugin tuple f
 | `contextMaxChars` | `1200` | Maximum character budget for the automatic relevant-memory block. |
 | `contextMinScore` | `1` when query provided | Minimum relevance score for automatic context loading. |
 | `autoSaveScope` | `"user"` | Default scope for auto-saved explicit remember requests. |
+| `autoSaveOnCompact` | `false` | When true, `memory_compact` saves a `context/system` memory recording the compaction (entries before → after, duplicates removed). |
 | `memoryBranch` | `"memory/agent"` | Git branch name for memory storage. Change to isolate memory per agent or team. |
 
 For local development, symlink the package into the plugin cache:
