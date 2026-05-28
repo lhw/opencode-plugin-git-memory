@@ -1,7 +1,7 @@
 {
   "name": "opencode-plugin-git-memory",
   "module": "index.ts",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Git-backed persistent memory for OpenCode — stores AI agent memories on a detached branch via git plumbing",
   "author": "lhw",
   "repository": {
