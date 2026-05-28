@@ -123,10 +123,16 @@ AI: [calls memory_forget with type="preference", scope="user",
 Automatic context loading is disabled by default. When `autoLoad` is enabled, the plugin uses OpenCode chat hooks to remember the latest user message, search active memories, and inject a compact block like this into system context:
 
 ```md
-Relevant Memory:
-- context/deploy/staging: Use materialize-deployments.cjs for staging runtime restart
-- context/tests: Run make staging-live-onboarding-e2e for staging onboarding
+RM:
+c/deploy/staging: Use materialize-deployments.cjs for staging runtime restart
+c/tests: Run make staging-live-onboarding-e2e for staging onboarding
 ```
+
+The context pack uses a token-efficient condensed format:
+- **`RM:`** header instead of `Relevant Memory:` (—13 chars)
+- **Single-letter types**: `d`=decision, `l`=learning, `r`=preference, `b`=blocker, `c`=context, `p`=pattern
+- **Scope grouping**: memories from the same scope+type are merged into one line
+- **Time-decay scoring**: memories older than 1 day score lower, >1 week lower still, >90 days near-zero
 
 Automatic context saving is also disabled by default. When `autoSave` is enabled, it is intentionally conservative and only stores explicit requests such as:
 

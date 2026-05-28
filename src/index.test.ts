@@ -245,7 +245,7 @@ describe("memory_recall", () => {
     const tools = await loadTools()
     const output = await tools.memoryContext.execute({ query: "staging deploy", limit: 2, maxChars: 220 }, context)
 
-    assert.ok(output.includes("Relevant Memory:"))
+    assert.ok(output.includes("RM:"))
     assert.ok(output.includes("deploy/staging"))
     assert.ok(output.includes("tests"))
     assert.ok(!output.includes("runtime/local"))
@@ -307,7 +307,7 @@ describe("memory_recall", () => {
     const output = { system: [] as string[] }
     await plugin["experimental.chat.system.transform"]({}, output)
 
-    assert.ok(output.system.join("\n").includes("Relevant Memory:"))
+    assert.ok(output.system.join("\n").includes("RM:"))
     assert.ok(output.system.join("\n").includes("deploy/staging"))
   })
 })

@@ -2,6 +2,15 @@ export const MEMORY_TYPES = ["decision", "learning", "preference", "blocker", "c
 
 export type MemoryType = typeof MEMORY_TYPES[number]
 
+export const TYPE_SHORT: Record<MemoryType, string> = {
+  decision: "d",
+  learning: "l",
+  preference: "r",
+  blocker: "b",
+  context: "c",
+  pattern: "p",
+}
+
 export interface Memory {
   ts: string
   type: MemoryType
@@ -154,7 +163,7 @@ export const formatMemory = (memory: Memory): string => {
   return `[${date}] ${memory.type}/${memory.scope}: ${memory.content}${issue}${tags}`
 }
 
-export const scoreMatch = (memory: Memory, words: string[]): number => {
+export const scoreMatch = (memory: Memory, words: string[], baselineTs?: string): number => {
   const searchable = `${memory.type} ${memory.scope} ${memory.content} ${memory.tags?.join(" ") || ""}`.toLowerCase()
   let score = 0
   for (const word of words) {
@@ -163,6 +172,14 @@ export const scoreMatch = (memory: Memory, words: string[]): number => {
     if (memory.type.toLowerCase() === word) score += 2
     if (memory.tags?.some((tag) => tag.toLowerCase() === word)) score += 2
   }
+
+  if (baselineTs && score > 0) {
+    const ageMs = new Date(baselineTs).getTime() - new Date(memory.ts).getTime()
+    const ageDays = ageMs / 86_400_000
+    const decay = ageDays <= 1 ? 1 : ageDays <= 7 ? 0.8 : ageDays <= 30 ? 0.5 : ageDays <= 90 ? 0.3 : 0.1
+    score = Math.round(score * decay)
+  }
+
   return score
 }
 
@@ -279,10 +296,11 @@ export const buildContextPack = (memories: Memory[], options: {
     tags: options.tags,
   })
 
+  const now = new Date().toISOString()
   const ranked = results
     .map((memory) => ({
       memory,
-      score: words.length ? scoreMatch(memory, words) : 0,
+      score: words.length ? scoreMatch(memory, words, now) : 0,
     }))
     .filter((item) => item.score >= minScore)
     .sort((a, b) => {
@@ -293,15 +311,38 @@ export const buildContextPack = (memories: Memory[], options: {
 
   if (!ranked.length) return ""
 
-  const lines = ["Relevant Memory:"]
+  const groups = new Map<string, { type: MemoryType; contents: string[] }>()
+  for (const { memory } of ranked) {
+    const key = `${memory.scope}::${memory.type}`
+    if (!groups.has(key)) groups.set(key, { type: memory.type, contents: [] })
+    groups.get(key)!.contents.push(memory.content)
+  }
+
+  const lines = ["RM:"]
   let used = lines[0]!.length + 1
 
-  for (const { memory } of ranked) {
-    const prefix = `- ${memory.type}/${memory.scope}: `
+  for (const [key, group] of groups) {
+    const shortType = TYPE_SHORT[group.type]
+    const scope = key.split("::")[0]!
+    const prefix = `${shortType}/${scope}: `
     const remaining = maxChars - used - prefix.length
     if (remaining <= 20) break
 
-    const line = `${prefix}${truncate(memory.content, Math.min(remaining, 260))}`
+    let merged = ""
+    for (const content of group.contents) {
+      const sep = merged ? "; " : ""
+      const addition = sep + content
+      if (prefix.length + merged.length + addition.length > maxChars - used - 1) {
+        const budget = Math.max(0, maxChars - used - prefix.length - (merged ? 2 : 1))
+        if (budget <= 0) break
+        merged += sep + truncate(content, Math.min(budget, 200))
+        continue
+      }
+      merged += addition
+    }
+
+    if (!merged) continue
+    const line = `${prefix}${merged}`
     lines.push(line)
     used += line.length + 1
   }
