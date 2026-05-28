@@ -1,0 +1,45 @@
+{
+  "name": "@lhw/opencode-plugin-git-memory",
+  "module": "index.ts",
+  "version": "0.1.0",
+  "description": "Git-backed persistent memory for OpenCode — stores AI agent memories on a detached branch via git plumbing",
+  "author": "lhw",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lhw/opencode-plugin-git-memory.git"
+  },
+  "homepage": "https://github.com/lhw/opencode-plugin-git-memory#readme",
+  "bugs": "https://github.com/lhw/opencode-plugin-git-memory/issues",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "memory",
+    "agent",
+    "git-memory",
+    "detached-branch",
+    "persistent-memory",
+    "agent-memory"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun run tsc --noEmit"
+  },
+  "files": [
+    "index.ts",
+    "src/index.ts",
+    "src/format.ts",
+    "src/git-store.ts"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.0.153",
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
