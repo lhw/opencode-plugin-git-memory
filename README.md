@@ -172,14 +172,20 @@ Configure the behavior through plugin options by using OpenCode's plugin tuple f
 | `autoSaveScope` | `"user"` | Default scope for auto-saved explicit remember requests. |
 | `memoryBranch` | `"memory/agent"` | Git branch name for memory storage. Change to isolate memory per agent or team. |
 
-For local development:
+For local development, symlink the package into the plugin cache:
+
+```bash
+ln -sf "$(pwd)" ~/.cache/opencode/node_modules/opencode-plugin-git-memory
+```
+
+Then use the normal plugin name:
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
     [
-      "file:///absolute/path/to/opencode-plugin-git-memory/index.ts",
+      "opencode-plugin-git-memory",
       {
         "autoLoad": true,
         "autoSave": true
@@ -303,13 +309,19 @@ npm test
 npm run typecheck
 ```
 
-Point your OpenCode config to the local checkout via a `file://` URL:
+Point your OpenCode config to the local checkout by symlinking the package into the plugin cache:
+
+```bash
+ln -sf "$(pwd)" ~/.cache/opencode/node_modules/opencode-plugin-git-memory
+```
+
+Or for development, reference it directly in your config:
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["file:///absolute/path/to/opencode-plugin-git-memory/index.ts"]
+  "plugin": ["opencode-plugin-git-memory"]
 }
 ```
 
-Replace `/absolute/path/to/opencode-plugin-git-memory` with your actual path.
+OpenCode resolves the plugin from `node_modules` — the symlink above keeps it pointing at your local checkout.
