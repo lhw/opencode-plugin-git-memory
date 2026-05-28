@@ -18,6 +18,9 @@ logs
 _.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
+# test artifacts
+.tmp-tests
+
 # dotenv environment variable files
 .env
 .env.development.local

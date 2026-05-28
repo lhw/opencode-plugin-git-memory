@@ -1,3 +1,4 @@
+import { spawnSync } from "child_process"
 import { dateFromTs, encodeDeletion, encodeMemory, parseLine } from "./format"
 import type { Memory, MemoryEntry, MemoryStore } from "./format"
 
@@ -7,16 +8,15 @@ export interface GitStoreOptions {
   subdir?: string
 }
 
-const git = async (args: string[], options?: { input?: string; cwd?: string }): Promise<{ stdout: string; exitCode: number }> => {
-  const proc = Bun.spawnSync(["git", ...args], {
+const git = (args: string[], options?: { input?: string; cwd?: string }): { stdout: string; exitCode: number } => {
+  const proc = spawnSync("git", args, {
     cwd: options?.cwd,
-    stdin: options?.input !== undefined ? Buffer.from(options.input) : "inherit",
-    stdout: "pipe",
-    stderr: "pipe",
+    input: options?.input !== undefined ? options.input : undefined,
+    encoding: "utf8",
   })
   return {
-    stdout: proc.stdout.toString().trimEnd(),
-    exitCode: proc.exitCode,
+    stdout: (proc.stdout ?? "").trimEnd(),
+    exitCode: proc.status ?? 1,
   }
 }
 
@@ -33,89 +33,85 @@ export class GitStore implements MemoryStore {
     this.dir = this.subdir
   }
 
-  private g(args: string[], options?: { input?: string }): Promise<{ stdout: string; exitCode: number }> {
+  private g(args: string[], options?: { input?: string }): { stdout: string; exitCode: number } {
     return git(args, { ...options, cwd: this.repoRoot })
   }
 
-  private async readBranchFile(filepath: string): Promise<string | null> {
-    const { stdout, exitCode } = await this.g(["show", `${this.branch}:${filepath}`])
+  private readBranchFile(filepath: string): string | null {
+    const { stdout, exitCode } = this.g(["show", `${this.branch}:${filepath}`])
     if (exitCode !== 0) return null
     return stdout
   }
 
-  private async writeContent(filepath: string, content: string, message: string): Promise<void> {
+  private writeContent(filepath: string, content: string, message: string): void {
     const normalizedContent = content.endsWith("\n") ? content : content + "\n"
-    const blobResult = await this.g(["hash-object", "-w", "--stdin"], { input: normalizedContent })
+    const blobResult = this.g(["hash-object", "-w", "--stdin"], { input: normalizedContent })
     const blobHash = blobResult.stdout.trim()
 
-    const indexPath = `/tmp/git-idx-${crypto.randomUUID()}`
-    try {
-      await this.g(["read-tree", this.branch])
-      await this.g(["update-index", "--add", "--cacheinfo", `100644,${blobHash},${filepath}`])
+    this.g(["read-tree", this.branch])
+    this.g(["update-index", "--add", "--cacheinfo", `100644,${blobHash},${filepath}`])
 
-      const treeResult = await this.g(["write-tree"])
-      const treeHash = treeResult.stdout.trim()
+    const treeResult = this.g(["write-tree"])
+    const treeHash = treeResult.stdout.trim()
 
-      const parentResult = await this.g(["rev-parse", "--verify", this.branch])
-      const parentRef = parentResult.exitCode === 0 ? parentResult.stdout.trim() : null
+    const parentResult = this.g(["rev-parse", "--verify", this.branch])
+    const parentRef = parentResult.exitCode === 0 ? parentResult.stdout.trim() : null
 
-      let commitHash: string
-      if (parentRef) {
-        const result = await this.g(["commit-tree", treeHash, "-p", parentRef], { input: message })
-        commitHash = result.stdout.trim()
-      } else {
-        const result = await this.g(["commit-tree", treeHash], { input: message })
-        commitHash = result.stdout.trim()
-      }
-
-      await this.g(["update-ref", this.branch, commitHash])
-    } finally {
-      await Bun.$`rm -f ${indexPath}`.nothrow().quiet()
+    let commitHash: string
+    if (parentRef) {
+      const result = this.g(["commit-tree", treeHash, "-p", parentRef], { input: message })
+      commitHash = result.stdout.trim()
+    } else {
+      const result = this.g(["commit-tree", treeHash], { input: message })
+      commitHash = result.stdout.trim()
     }
+
+    this.g(["update-ref", this.branch, commitHash])
+    this.g(["read-tree", "HEAD"])
   }
 
   async ensureDir(): Promise<void> {
-    const result = await this.g(["rev-parse", "--git-dir"])
+    const result = this.g(["rev-parse", "--git-dir"])
     if (result.exitCode !== 0) throw new Error(`Not a git repository: ${this.repoRoot}`)
 
-    const refResult = await this.g(["rev-parse", "--verify", this.branch])
+    const refResult = this.g(["rev-parse", "--verify", this.branch])
     if (refResult.exitCode !== 0) {
-      await this.g(["read-tree", "--empty"])
-      const emptyTree = await this.g(["write-tree"])
-      const sanitizedIndex = await this.g(["read-tree", "HEAD"])
-      const init = await this.g(["commit-tree", emptyTree.stdout.trim()], { input: "init memory store" })
-      await this.g(["update-ref", this.branch, init.stdout.trim()])
+      this.g(["read-tree", "--empty"])
+      const emptyTree = this.g(["write-tree"])
+      this.g(["read-tree", "HEAD"])
+      const init = this.g(["commit-tree", emptyTree.stdout.trim()], { input: "init memory store" })
+      this.g(["update-ref", this.branch, init.stdout.trim()])
     }
   }
 
   async appendMemory(memory: Memory): Promise<void> {
-    await this.ensureDir()
+    this.ensureDir()
     const filename = `${dateFromTs(memory.ts)}.logfmt`
     const filepath = `${this.subdir}/${filename}`
     const line = `${encodeMemory(memory)}\n`
 
-    const existing = await this.readBranchFile(filepath)
+    const existing = this.readBranchFile(filepath)
     const newContent = existing ? existing + line : line
 
-    await this.writeContent(filepath, newContent, `memory: add ${memory.type}/${memory.scope}`)
+    this.writeContent(filepath, newContent, `memory: add ${memory.type}/${memory.scope}`)
   }
 
   async appendDeletion(memory: Memory, reason: string): Promise<void> {
-    await this.ensureDir()
+    this.ensureDir()
     const filepath = `${this.subdir}/deletions.logfmt`
     const line = `${encodeDeletion(memory, reason)}\n`
 
-    const existing = await this.readBranchFile(filepath)
+    const existing = this.readBranchFile(filepath)
     const newContent = existing ? existing + line : line
 
-    await this.writeContent(filepath, newContent, `memory: delete ${memory.type}/${memory.scope}`)
+    this.writeContent(filepath, newContent, `memory: delete ${memory.type}/${memory.scope}`)
   }
 
   async readEntries(): Promise<MemoryEntry[]> {
-    await this.ensureDir()
+    this.ensureDir()
 
     const prefix = `${this.subdir}/`
-    const result = await this.g(["ls-tree", "-r", "--name-only", this.branch])
+    const result = this.g(["ls-tree", "-r", "--name-only", this.branch])
     if (result.exitCode !== 0 || !result.stdout) return []
 
     const files = result.stdout
@@ -125,7 +121,7 @@ export class GitStore implements MemoryStore {
 
     const entries: MemoryEntry[] = []
     for (const filepath of files) {
-      const content = await this.readBranchFile(filepath)
+      const content = this.readBranchFile(filepath)
       if (!content) continue
       const lines = content.split("\n")
       lines.forEach((line, lineIndex) => {
@@ -139,17 +135,17 @@ export class GitStore implements MemoryStore {
 
   async readDeletionLines(): Promise<string[]> {
     const filepath = `${this.subdir}/deletions.logfmt`
-    const content = await this.readBranchFile(filepath)
+    const content = this.readBranchFile(filepath)
     if (!content) return []
     return content.trim().split("\n").filter(Boolean)
   }
 
   async rewriteFile(filepath: string, lines: string[]): Promise<void> {
     const content = lines.length ? `${lines.join("\n")}\n` : ""
-    await this.writeContent(filepath, content, `memory: rewrite ${filepath}`)
+    this.writeContent(filepath, content, `memory: rewrite ${filepath}`)
   }
 
   async readFile(filepath: string): Promise<string | null> {
-    return await this.readBranchFile(filepath)
+    return this.readBranchFile(filepath)
   }
 }

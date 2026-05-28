@@ -349,7 +349,7 @@ export const inferExplicitMemory = (text: string, defaultScope: string): Omit<Me
 }
 
 export const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T | undefined> => {
-  let timeout: Timer | undefined
+  let timeout: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
       promise,

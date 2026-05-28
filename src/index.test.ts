@@ -1,9 +1,13 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdir, rm } from "node:fs/promises"
+import { spawnSync } from "child_process"
+import { randomUUID } from "crypto"
+import { mkdir, rm, writeFile } from "node:fs/promises"
+import { describe, it, beforeEach, afterEach } from "node:test"
+import { strict as assert } from "node:assert"
 import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { MemoryPlugin } from "../index"
 
-const tempRoot = join(import.meta.dir, "..", ".tmp-tests")
+const tempRoot = join(fileURLToPath(new URL("..", import.meta.url)), ".tmp-tests")
 let testDir = ""
 
 const context = {
@@ -14,16 +18,15 @@ const context = {
 }
 
 const git = (args: string[], dir: string, input?: string): { stdout: string; stderr: string; exitCode: number } => {
-  const proc = Bun.spawnSync(["git", ...args], {
+  const proc = spawnSync("git", args, {
     cwd: dir,
-    stdin: input !== undefined ? Buffer.from(input) : "inherit",
-    stdout: "pipe",
-    stderr: "pipe",
+    input: input ?? undefined,
+    encoding: "utf8",
   })
   return {
-    stdout: proc.stdout.toString(),
-    stderr: proc.stderr.toString(),
-    exitCode: proc.exitCode,
+    stdout: (proc.stdout ?? "").toString(),
+    stderr: (proc.stderr ?? "").toString(),
+    exitCode: proc.status ?? 1,
   }
 }
 
@@ -32,25 +35,18 @@ const initRepo = async (dir: string) => {
   git(["init"], dir)
   git(["config", "user.email", "test@test.com"], dir)
   git(["config", "user.name", "test"], dir)
-  await Bun.write(join(dir, ".gitignore"), ".opencode/\n")
+  await writeFile(join(dir, ".gitignore"), ".opencode/\n")
   git(["add", ".gitignore"], dir)
   git(["commit", "-m", "init"], dir, "init")
-}
-
-const emptyTreeHash = (dir: string): string => {
-  const idx = `/tmp/empty-tree-${crypto.randomUUID()}`
-  git(["read-tree", "--empty"], dir)
-  const { stdout } = git(["write-tree"], dir)
-  return stdout.trim()
 }
 
 const ensureMemoryBranch = (dir: string) => {
   const { exitCode } = git(["rev-parse", "--verify", "refs/memory/agent"], dir)
   if (exitCode === 0) return
-  const tree = emptyTreeHash(dir)
-  const { stdout } = git(["commit-tree", tree], dir, "init")
-  const commitHash = stdout.trim()
-  git(["update-ref", "refs/memory/agent", commitHash], dir)
+  git(["read-tree", "--empty"], dir)
+  const { stdout: emptyTree } = git(["write-tree"], dir)
+  const { stdout: commitHash } = git(["commit-tree", emptyTree.trim()], dir, "init")
+  git(["update-ref", "refs/memory/agent", commitHash.trim()], dir)
 }
 
 const writeMemoryFile = (dir: string, filename: string, lines: string[]) => {
@@ -59,20 +55,13 @@ const writeMemoryFile = (dir: string, filename: string, lines: string[]) => {
   const content = lines.join("\n") + "\n"
   const ref = "refs/memory/agent"
 
-  const { stdout: blobOut } = git(["hash-object", "-w", "--stdin"], dir, content)
-  const blobHash = blobOut.trim()
-
-  const idxFile = `/tmp/test-idx-${crypto.randomUUID()}`
+  const { stdout: blobHash } = git(["hash-object", "-w", "--stdin"], dir, content)
   git(["read-tree", ref], dir)
-  git(["update-index", "--add", "--cacheinfo", `100644,${blobHash},${filepath}`], dir)
-  const { stdout: treeOut } = git(["write-tree"], dir)
-  const treeHash = treeOut.trim()
-
-  const { stdout: parentOut } = git(["rev-parse", ref], dir)
-  const parentHash = parentOut.trim()
-  const { stdout: commitOut } = git(["commit-tree", treeHash, "-p", parentHash], dir, "test memory data")
-  const commitHash = commitOut.trim()
-  git(["update-ref", ref, commitHash], dir)
+  git(["update-index", "--add", "--cacheinfo", `100644,${blobHash.trim()},${filepath}`], dir)
+  const { stdout: treeHash } = git(["write-tree"], dir)
+  const { stdout: parentHash } = git(["rev-parse", ref], dir)
+  const { stdout: commitHash } = git(["commit-tree", treeHash.trim(), "-p", parentHash.trim()], dir, "test memory data")
+  git(["update-ref", ref, commitHash.trim()], dir)
 }
 
 const readMemoryFile = (dir: string, filename: string): string => {
@@ -91,27 +80,23 @@ const loadTools = async () => {
   const forget = plugin.tool.memory_forget
   const compact = plugin.tool.memory_compact
   const memoryContext = plugin.tool.memory_context
-  if (!recall) throw new Error("Plugin did not return memory_recall")
-  if (!remember) throw new Error("Plugin did not return memory_remember")
-  if (!exportMemories) throw new Error("Plugin did not return memory_export")
-  if (!importMemories) throw new Error("Plugin did not return memory_import")
-  if (!forget) throw new Error("Plugin did not return memory_forget")
-  if (!compact) throw new Error("Plugin did not return memory_compact")
-  if (!memoryContext) throw new Error("Plugin did not return memory_context")
+  if (!recall || !remember || !exportMemories || !importMemories || !forget || !compact || !memoryContext) {
+    throw new Error("Plugin did not return all tools")
+  }
   return { recall, remember, exportMemories, importMemories, forget, compact, memoryContext }
 }
 
-beforeEach(async () => {
-  testDir = join(tempRoot, crypto.randomUUID())
-  await initRepo(testDir)
-})
-
-afterEach(async () => {
-  await rm(testDir, { recursive: true, force: true })
-})
-
 describe("memory_recall", () => {
-  test("returns the highest scoring query matches within the limit", async () => {
+  beforeEach(async () => {
+    testDir = join(tempRoot, randomUUID())
+    await initRepo(testDir)
+  })
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true })
+  })
+
+  it("returns the highest scoring query matches within the limit", async () => {
     writeMemoryFile(testDir, "2026-05-28.logfmt", [
       'ts=2026-05-28T10:00:00.000Z type=context scope=api content="api only"',
       'ts=2026-05-28T10:01:00.000Z type=context scope=database content="api only"',
@@ -121,12 +106,12 @@ describe("memory_recall", () => {
     const tools = await loadTools()
     const output = await tools.recall.execute({ query: "api", limit: 2 }, context)
 
-    expect(output).toContain("[2026-05-28] decision/api: api decision")
-    expect(output).toContain("[2026-05-28] context/api: api only")
-    expect(output).not.toContain("context/database")
+    assert.ok(output.includes("[2026-05-28] decision/api: api decision"))
+    assert.ok(output.includes("[2026-05-28] context/api: api only"))
+    assert.ok(!output.includes("context/database"))
   })
 
-  test("returns the latest chronological memories when no query is provided", async () => {
+  it("returns the latest chronological memories when no query is provided", async () => {
     writeMemoryFile(testDir, "2026-05-27.logfmt", ['ts=2026-05-27T10:00:00.000Z type=context scope=old content="old memory"'])
     writeMemoryFile(testDir, "2026-05-28.logfmt", [
       'ts=2026-05-28T10:00:00.000Z type=context scope=first content="first new memory"',
@@ -136,12 +121,12 @@ describe("memory_recall", () => {
     const tools = await loadTools()
     const output = await tools.recall.execute({ limit: 2 }, context)
 
-    expect(output).toContain("[2026-05-28] context/first: first new memory")
-    expect(output).toContain("[2026-05-28] context/second: second new memory")
-    expect(output).not.toContain("old memory")
+    assert.ok(output.includes("[2026-05-28] context/first: first new memory"))
+    assert.ok(output.includes("[2026-05-28] context/second: second new memory"))
+    assert.ok(!output.includes("old memory"))
   })
 
-  test("round-trips multiline content written by memory_remember", async () => {
+  it("round-trips multiline content written by memory_remember", async () => {
     const tools = await loadTools()
     await tools.remember.execute(
       {
@@ -156,11 +141,11 @@ describe("memory_recall", () => {
     const date = new Date().toISOString().split("T")[0]!
     const raw = readMemoryFile(testDir, `${date}.logfmt`)
 
-    expect(output).toContain("line one\nline two with \"quotes\" and \\ slash")
-    expect(raw).toContain('content="line one\\nline two with \\"quotes\\" and \\\\ slash"')
+    assert.ok(output.includes("line one\nline two with \"quotes\" and \\ slash"))
+    assert.ok(raw.includes('content="line one\\nline two with \\"quotes\\" and \\\\ slash"'))
   })
 
-  test("imports compatible logfmt records with escaped multiline content", async () => {
+  it("imports compatible logfmt records with escaped multiline content", async () => {
     const tools = await loadTools()
     await tools.importMemories.execute(
       {
@@ -173,20 +158,20 @@ describe("memory_recall", () => {
     const output = await tools.recall.execute({ scope: "imported", match: "exact" }, context)
     const exported = await tools.exportMemories.execute({ format: "jsonl" }, context)
 
-    expect(output).toContain("first\nsecond")
-    expect(JSON.parse(exported).content).toBe("first\nsecond")
+    assert.ok(output.includes("first\nsecond"))
+    assert.equal(JSON.parse(exported).content, "first\nsecond")
   })
 
-  test("preserves raw backslashes from older compatible records", async () => {
+  it("preserves raw backslashes from older compatible records", async () => {
     writeMemoryFile(testDir, "2026-05-28.logfmt", ['ts=2026-05-28T10:00:00.000Z type=context scope=paths content="C:\\tmp\\memory"'])
 
     const tools = await loadTools()
     const output = await tools.recall.execute({ scope: "paths", match: "exact" }, context)
 
-    expect(output).toContain("C:\\tmp\\memory")
+    assert.ok(output.includes("C:\\tmp\\memory"))
   })
 
-  test("filters by tags, date range, and exact scope matching", async () => {
+  it("filters by tags, date range, and exact scope matching", async () => {
     writeMemoryFile(testDir, "2026-05-28.logfmt", [
       'ts=2026-05-28T10:00:00.000Z type=context scope=api content="old api" tags=backend,stale',
       'ts=2026-05-28T11:00:00.000Z type=context scope=api-v2 content="new api v2" tags=backend,current',
@@ -199,12 +184,12 @@ describe("memory_recall", () => {
       context,
     )
 
-    expect(output).toContain("new api")
-    expect(output).not.toContain("old api")
-    expect(output).not.toContain("api-v2")
+    assert.ok(output.includes("new api"))
+    assert.ok(!output.includes("old api"))
+    assert.ok(!output.includes("api-v2"))
   })
 
-  test("memory_forget with query deletes only the best matching memory", async () => {
+  it("memory_forget with query deletes only the best matching memory", async () => {
     writeMemoryFile(testDir, "2026-05-28.logfmt", [
       'ts=2026-05-28T10:00:00.000Z type=context scope=api content="keep postgres detail"',
       'ts=2026-05-28T11:00:00.000Z type=context scope=api content="delete redis detail"',
@@ -214,12 +199,12 @@ describe("memory_recall", () => {
     const deleted = await tools.forget.execute({ type: "context", scope: "api", reason: "test", query: "redis" }, context)
     const output = await tools.recall.execute({ scope: "api", match: "exact" }, context)
 
-    expect(deleted).toContain("Deleted 1 context memory(s)")
-    expect(output).toContain("keep postgres detail")
-    expect(output).not.toContain("delete redis detail")
+    assert.ok(deleted.includes("Deleted 1 context memory(s)"))
+    assert.ok(output.includes("keep postgres detail"))
+    assert.ok(!output.includes("delete redis detail"))
   })
 
-  test("memory_export and memory_import round-trip json", async () => {
+  it("memory_export and memory_import round-trip json", async () => {
     const tools = await loadTools()
     await tools.remember.execute({ type: "pattern", scope: "tests", content: "use plugin interface", tags: ["testing"] }, context)
 
@@ -230,11 +215,11 @@ describe("memory_recall", () => {
     const imported = await tools.importMemories.execute({ format: "json", data: exported }, context)
     const output = await tools.recall.execute({ scope: "tests", match: "exact" }, context)
 
-    expect(imported).toBe("Imported 1 memory(s)")
-    expect(output).toContain("pattern/tests: use plugin interface [testing]")
+    assert.equal(imported, "Imported 1 memory(s)")
+    assert.ok(output.includes("pattern/tests: use plugin interface [testing]"))
   })
 
-  test("memory_compact removes exact duplicate records", async () => {
+  it("memory_compact removes exact duplicate records", async () => {
     writeMemoryFile(testDir, "2026-05-28.logfmt", [
       'ts=2026-05-28T10:00:00.000Z type=context scope=api content="duplicate"',
       'ts=2026-05-28T10:00:00.000Z type=context scope=api content="duplicate"',
@@ -245,12 +230,12 @@ describe("memory_recall", () => {
     const compacted = await tools.compact.execute({}, context)
     const output = await tools.recall.execute({}, context)
 
-    expect(dryRun).toContain("1 duplicate(s) removed")
-    expect(compacted).toContain("1 duplicate(s) removed")
-    expect(output).toContain("Found 1 memories")
+    assert.ok(dryRun.includes("1 duplicate(s) removed"))
+    assert.ok(compacted.includes("1 duplicate(s) removed"))
+    assert.ok(output.includes("Found 1 memories"))
   })
 
-  test("memory_context returns a compact relevant memory pack", async () => {
+  it("memory_context returns a compact relevant memory pack", async () => {
     writeMemoryFile(testDir, "2026-05-28.logfmt", [
       'ts=2026-05-28T10:00:00.000Z type=context scope=deploy/staging content="Use materialize-deployments.cjs for staging runtime restart" tags=staging,deploy',
       'ts=2026-05-28T11:00:00.000Z type=context scope=tests content="Run make staging-live-onboarding-e2e for staging onboarding" tags=staging,e2e',
@@ -260,13 +245,13 @@ describe("memory_recall", () => {
     const tools = await loadTools()
     const output = await tools.memoryContext.execute({ query: "staging deploy", limit: 2, maxChars: 220 }, context)
 
-    expect(output).toContain("Relevant Memory:")
-    expect(output).toContain("deploy/staging")
-    expect(output).toContain("tests")
-    expect(output).not.toContain("runtime/local")
+    assert.ok(output.includes("Relevant Memory:"))
+    assert.ok(output.includes("deploy/staging"))
+    assert.ok(output.includes("tests"))
+    assert.ok(!output.includes("runtime/local"))
   })
 
-  test("automatic hooks are disabled by default", async () => {
+  it("automatic hooks are disabled by default", async () => {
     const plugin = await MemoryPlugin({ directory: testDir } as never)
     if (!plugin["chat.message"] || !plugin["experimental.chat.system.transform"] || !plugin.tool?.memory_recall) throw new Error("Plugin did not return hooks/tools")
 
@@ -285,11 +270,11 @@ describe("memory_recall", () => {
 
     const output = await plugin.tool.memory_recall.execute({ scope: "user", match: "exact" }, context)
 
-    expect(output).toContain("No matching memories")
-    expect(system.system).toEqual([])
+    assert.ok(output.includes("No matching memories"))
+    assert.deepEqual(system.system, [])
   })
 
-  test("auto-save stores explicit remember requests when enabled", async () => {
+  it("auto-save stores explicit remember requests when enabled", async () => {
     const plugin = await MemoryPlugin({ directory: testDir } as never, { autoSave: true })
     if (!plugin["chat.message"] || !plugin.tool?.memory_recall) throw new Error("Plugin did not return hooks/tools")
 
@@ -303,10 +288,10 @@ describe("memory_recall", () => {
 
     const output = await plugin.tool.memory_recall.execute({ scope: "user", match: "exact" }, context)
 
-    expect(output).toContain("preference/user: I prefer minimal diffs [auto]")
+    assert.ok(output.includes("preference/user: I prefer minimal diffs [auto]"))
   })
 
-  test("auto-load injects relevant memories into system context when enabled", async () => {
+  it("auto-load injects relevant memories into system context when enabled", async () => {
     writeMemoryFile(testDir, "2026-05-28.logfmt", ['ts=2026-05-28T10:00:00.000Z type=context scope=deploy/staging content="Use materialize-deployments.cjs for staging runtime restart" tags=staging,deploy'])
     const plugin = await MemoryPlugin({ directory: testDir } as never, { autoLoad: true })
     if (!plugin["chat.message"] || !plugin["experimental.chat.system.transform"]) throw new Error("Plugin did not return auto hooks")
@@ -322,7 +307,7 @@ describe("memory_recall", () => {
     const output = { system: [] as string[] }
     await plugin["experimental.chat.system.transform"]({}, output)
 
-    expect(output.system.join("\n")).toContain("Relevant Memory:")
-    expect(output.system.join("\n")).toContain("deploy/staging")
+    assert.ok(output.system.join("\n").includes("Relevant Memory:"))
+    assert.ok(output.system.join("\n").includes("deploy/staging"))
   })
 })

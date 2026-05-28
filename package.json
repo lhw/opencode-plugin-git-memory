@@ -21,8 +21,8 @@
     "agent-memory"
   ],
   "scripts": {
-    "test": "bun test",
-    "typecheck": "bun run tsc --noEmit"
+    "test": "node --import tsx --test src/index.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "files": [
     "index.ts",
@@ -37,9 +37,8 @@
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.0.153",
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4",
     "typescript": "^5"
   }
 }
