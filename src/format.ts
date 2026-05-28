@@ -348,8 +348,14 @@ export const textFromParts = (parts: unknown[]) => parts
 export const inferExplicitMemory = (text: string, defaultScope: string): Omit<Memory, "ts"> | null => {
   if (/\b(don't|do not|dont)\s+remember\b/i.test(text)) return null
 
-  const match = text.match(/(?:^|\b)(?:please\s+)?remember(?:\s+that|:)?\s+([\s\S]+)$/i)
-  const content = match?.[1]?.trim()
+  const idx = text.search(/\bremember\b/i)
+  if (idx === -1) return null
+  let rest = text.slice(idx + 8)
+  const havePlease = /^\s*please\b/i.test(rest)
+  if (havePlease) rest = rest.replace(/^\s*please\s*/i, "")
+  const haveThat = /^\s+that\b|^:\s*/i.test(rest)
+  if (haveThat) rest = rest.replace(/^\s+that\s*|^:\s*/i, "")
+  const content = rest.trim()
   if (!content) return null
 
   const lower = content.toLowerCase()
