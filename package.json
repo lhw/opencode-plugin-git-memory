@@ -1,5 +1,5 @@
 {
-  "name": "@lhw/opencode-plugin-git-memory",
+  "name": "opencode-plugin-git-memory",
   "module": "index.ts",
   "version": "0.1.0",
   "description": "Git-backed persistent memory for OpenCode — stores AI agent memories on a detached branch via git plumbing",
@@ -20,11 +20,16 @@
     "persistent-memory",
     "agent-memory"
   ],
+  "bin": {
+    "git-memory": "bin/setup.mjs"
+  },
   "scripts": {
+    "setup": "node ./bin/setup.mjs",
     "test": "node --import tsx --test src/index.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "files": [
+    "bin/",
     "index.ts",
     "src/index.ts",
     "src/format.ts",
@@ -34,6 +39,9 @@
   "type": "module",
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.4.0"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.0.153",

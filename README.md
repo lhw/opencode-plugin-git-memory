@@ -1,6 +1,6 @@
 # opencode-plugin-git-memory
 
-[![npm version](https://img.shields.io/npm/v/@lhw/opencode-plugin-git-memory)](https://www.npmjs.com/package/@lhw/opencode-plugin-git-memory)
+[![npm version](https://img.shields.io/npm/v/opencode-plugin-git-memory)](https://www.npmjs.com/package/opencode-plugin-git-memory)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A persistent memory plugin for [OpenCode](https://opencode.ai) that stores AI agent memories on a **detached git branch** — keeping your working tree clean while preserving full version history.
@@ -14,7 +14,7 @@ A persistent memory plugin for [OpenCode](https://opencode.ai) that stores AI ag
    ```json
    {
      "$schema": "https://opencode.ai/config.json",
-     "plugin": ["@lhw/opencode-plugin-git-memory"]
+     "plugin": ["opencode-plugin-git-memory"]
    }
    ```
 
@@ -35,7 +35,7 @@ To get the latest version, clear the cached plugin and let OpenCode reinstall it
 
 ```bash
 # Remove the plugin from cache
-rm -rf ~/.cache/opencode/node_modules/@lhw/opencode-plugin-git-memory
+rm -rf ~/.cache/opencode/node_modules/opencode-plugin-git-memory
 
 # Run OpenCode to trigger reinstall
 opencode
@@ -143,7 +143,7 @@ Configure the behavior through plugin options by using OpenCode's plugin tuple f
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
     [
-      "@lhw/opencode-plugin-git-memory",
+      "opencode-plugin-git-memory",
       {
         "autoLoad": true,
         "autoSave": true,
