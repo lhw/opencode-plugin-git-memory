@@ -310,4 +310,35 @@ describe("memory_recall", () => {
     assert.ok(output.system.join("\n").includes("RM:"))
     assert.ok(output.system.join("\n").includes("deploy/staging"))
   })
+
+  it("captureCompactedContext saves compacted session as memory", async () => {
+    const mockClient = {
+      session: {
+        messages: async () => ({
+          data: [
+            {
+              info: { role: "user" } as never,
+              parts: [{ type: "text", text: "How do I restart staging?" } as never],
+            },
+            {
+              info: { role: "assistant" } as never,
+              parts: [{ type: "text", text: "Use make staging-live-onboarding-e2e" } as never],
+            },
+          ],
+          error: undefined,
+        }),
+      },
+    }
+
+    const plugin = await MemoryPlugin({ directory: testDir, client: mockClient } as never, { autoSaveOnCompact: true })
+    if (!plugin.event) throw new Error("Plugin did not return event hook")
+
+    await plugin.event({ event: { type: "session.compacted", properties: { sessionID: "test-session" } } as never })
+
+    const output = await plugin.tool.memory_recall.execute({ scope: "session", match: "exact" }, context)
+
+    assert.ok(output.includes("context/session:"))
+    assert.ok(output.includes("How do I restart staging?"))
+    assert.ok(output.includes("Use make staging-live-onboarding-e2e"))
+  })
 })

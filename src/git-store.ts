@@ -101,7 +101,7 @@ export class GitStore implements MemoryStore {
     const line = `${encodeMemory(memory)}\n`
 
     const existing = this.readBranchFile(filepath)
-    const newContent = existing ? existing + line : line
+    const newContent = existing ? existing + "\n" + line : line
 
     this.writeContent(filepath, newContent, `memory: add ${memory.type}/${memory.scope}`)
   }
@@ -112,7 +112,7 @@ export class GitStore implements MemoryStore {
     const line = `${encodeDeletion(memory, reason)}\n`
 
     const existing = this.readBranchFile(filepath)
-    const newContent = existing ? existing + line : line
+    const newContent = existing ? existing + "\n" + line : line
 
     this.writeContent(filepath, newContent, `memory: delete ${memory.type}/${memory.scope}`)
   }
